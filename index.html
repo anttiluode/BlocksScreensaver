@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Screensaver • Dreamy Self-Playing Blocks</title>
+    <style>
+        body {
+            margin: 0;
+            background: radial-gradient(circle at center, #1a0f2e, #0a0519);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        #game-wrapper {
+            position: relative;
+            background: rgba(20, 10, 40, 0.75);
+            padding: 20px;
+            border-radius: 24px;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.9),
+                        inset 0 0 60px rgba(255, 180, 255, 0.08);
+            backdrop-filter: blur(16px);
+        }
+        canvas {
+            display: block;
+            border-radius: 16px;
+            background: #0a0519;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.8),
+                        0 0 30px rgba(255, 200, 255, 0.15);
+        }
+        .stats {
+            position: absolute;
+            left: -140px;
+            top: 30px;
+            text-align: right;
+            width: 120px;
+            pointer-events: none;
+        }
+        .stat-label {
+            font-size: 11px;
+            color: #b8a0ff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 600;
+        }
+        .stat-value {
+            font-size: 32px;
+            color: #ffe0ff;
+            margin-bottom: 28px;
+            font-weight: 300;
+            text-shadow: 0 0 15px rgba(255, 180, 255, 0.4);
+        }
+        #sound-toggle {
+            position: absolute;
+            right: -60px;
+            top: 30px;
+            font-size: 28px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: all 0.3s ease;
+            text-shadow: 0 0 10px rgba(255, 180, 255, 0.2);
+        }
+        #sound-toggle:hover {
+            opacity: 1;
+            transform: scale(1.1);
+            text-shadow: 0 0 15px rgba(255, 180, 255, 0.6);
+        }
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 5, 25, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 24px;
+            backdrop-filter: blur(8px);
+            cursor: pointer;
+            transition: all 0.4s ease;
+            z-index: 10;
+        }
+        #overlay:hover { background: rgba(25, 10, 45, 0.9); }
+        h2 {
+            color: #ff9dff;
+            margin: 0 0 8px 0;
+            font-weight: 400;
+            letter-spacing: 4px;
+            font-size: 26px;
+            text-shadow: 0 0 20px rgba(255, 157, 255, 0.6);
+            text-align: center;
+        }
+        p {
+            margin: 0;
+            color: #c8b0ff;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <div class="stats">
+        <div class="stat-label">Score</div>
+        <div id="score" class="stat-value">0</div>
+        <div class="stat-label">Blocks</div>
+        <div id="blocks" class="stat-value">0</div>
+    </div>
+    
+    <div id="sound-toggle" onclick="toggleSound()" style="display: none;">🔊</div>
+    
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="overlay" onclick="startGame()">
+        <h2>Block<br>Screensaver</h2>
+        <p>🎵 Click to Start & Enable Sound 🎵</p>
+    </div>
+</div>
+
+<script>
+/** * BLOCK SCREENSAVER - Soft Dreamy Self-Playing Blocks
+ * Gentle pastel colors + super soft relaxing sounds
+ */
+
+let soundEnabled = true;
+
+const Audio = {
+    ctx: null,
+    scale: [261.63, 293.66, 329.63, 392.00, 440.00, 523.25], 
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        }
+    },
+    playStartSound() {
+        if (!this.ctx || !soundEnabled) return; 
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.15);
+        
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.2);
+        
+        osc.connect(gain); 
+        gain.connect(this.ctx.destination);
+        
+        osc.start(); 
+        osc.stop(this.ctx.currentTime + 1.2);
+    },
+    playLand() {
+        if (!this.ctx || !soundEnabled) return; 
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        const freq = this.scale[Math.floor(Math.random() * this.scale.length)];
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.04, this.ctx.currentTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.5);
+        
+        osc.connect(gain); 
+        gain.connect(this.ctx.destination);
+        
+        osc.start(); 
+        osc.stop(this.ctx.currentTime + 1.5);
+    },
+    playClear() {
+        if (!this.ctx || !soundEnabled) return; 
+        
+        const chord = [261.63, 329.63, 392.00, 523.25]; 
+        chord.forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'triangle'; 
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+            gain.gain.setValueAtTime(0, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.03, this.ctx.currentTime + 0.1 + (i * 0.08)); 
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 2.5);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + 2.5);
+        });
+
+        const noise = this.ctx.createBufferSource();
+        const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 2.0, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < buffer.length; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(600, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 2.0);
+
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        noiseGain.gain.linearRampToValueAtTime(0.015, this.ctx.currentTime + 0.3);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 2.0);
+
+        noise.connect(filter).connect(noiseGain).connect(this.ctx.destination);
+        noise.start();
+    }
+};
+
+/**
+ * GAME CONFIGURATION
+ */
+const COLS = 10, ROWS = 20, SIZE = 32;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = COLS * SIZE;
+canvas.height = ROWS * SIZE;
+
+const COLORS = [
+    null,
+    '#ff9dff', '#ffcc80', '#a8ffcc', '#ff99bb', 
+    '#99ccff', '#d4a8ff', '#ffeb99' 
+];
+
+const SHAPES = [
+    [[1,1,1,1]], 
+    [[1,1],[1,1]], 
+    [[0,1,0],[1,1,1]],
+    [[1,1,0],[0,1,1]], 
+    [[0,1,1],[1,1,0]], 
+    [[1,0,0],[1,1,1]], 
+    [[0,0,1],[1,1,1]]
+];
+
+let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+let score = 0, blocksPlaced = 0, isGameOver = false;
+let dropCounter = 0;
+const dropInterval = 35; 
+let animationId = null;
+
+let player = { x: 0, y: 0, shape: null };
+
+/**
+ * CORE LOGIC
+ */
+function collide(b, x, y, shape) {
+    if (!shape) return true; 
+    for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < shape[r].length; c++) {
+            if (shape[r][c] !== 0) {
+                const nx = x + c;
+                const ny = y + r;
+                if (nx < 0 || nx >= COLS || ny >= ROWS || (ny >= 0 && b[ny][nx] !== 0)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function rotate(m) {
+    return m[0].map((_, i) => m.map(row => row[i]).reverse());
+}
+
+/**
+ * AI BRAIN 
+ */
+function evaluate(tempBoard) {
+    let heights = Array(COLS).fill(0);
+    let holes = 0;
+    
+    for (let c = 0; c < COLS; c++) {
+        let blocked = false;
+        for (let r = 0; r < ROWS; r++) {
+            if (tempBoard[r][c] !== 0) {
+                if (!blocked) { heights[c] = ROWS - r; blocked = true; }
+            } else if (blocked) {
+                holes++;
+            }
+        }
+    }
+    
+    let aggH = heights.reduce((a, b) => a + b, 0);
+    let bump = 0;
+    for (let i = 0; i < COLS - 1; i++) bump += Math.abs(heights[i] - heights[i+1]);
+    
+    let lines = 0;
+    for (let r = 0; r < ROWS; r++) {
+        if (tempBoard[r].every(v => v !== 0)) lines++;
+    }
+
+    return (lines * 600) - (aggH * 4) - (holes * 20) - (bump * 8);
+}
+
+function spawn() {
+    const type = Math.floor(Math.random() * SHAPES.length) + 1;
+    let baseShape = SHAPES[type - 1].map(row => row.map(v => v * type));
+    
+    let best = { x: 0, shape: null, score: -Infinity };
+    let currentShape = baseShape;
+
+    for (let rot = 0; rot < 4; rot++) {
+        for (let x = -2; x < COLS; x++) {
+            if (!collide(board, x, 0, currentShape)) {
+                let y = 0;
+                while (!collide(board, x, y + 1, currentShape)) y++;
+                
+                let tempBoard = board.map(row => [...row]);
+                for (let r = 0; r < currentShape.length; r++) {
+                    for (let c = 0; c < currentShape[r].length; c++) {
+                        if (currentShape[r][c] !== 0) tempBoard[y + r][x + c] = currentShape[r][c];
+                    }
+                }
+                
+                let score = evaluate(tempBoard);
+                if (score > best.score) {
+                    best.score = score;
+                    best.x = x;
+                    best.shape = currentShape.map(row => [...row]);
+                }
+            }
+        }
+        currentShape = rotate(currentShape);
+    }
+
+    // NEW GAME OVER LOGIC
+    if (!best.shape || collide(board, best.x, 0, best.shape)) {
+        isGameOver = true;
+        player.shape = null; // Clear active block so it doesn't draw over text
+
+        // Wait 3 seconds, wipe the board and stats, and restart perfectly
+        setTimeout(() => {
+            board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+            score = 0;
+            blocksPlaced = 0;
+            document.getElementById('score').innerText = '0';
+            document.getElementById('blocks').innerText = '0';
+            
+            isGameOver = false;
+            spawn();
+            lastTime = performance.now();
+            update(performance.now());
+        }, 3000); 
+
+        return; 
+    }
+
+    player.x = best.x;
+    player.y = 0;
+    player.shape = best.shape;
+}
+
+function lock() {
+    for (let r = 0; r < player.shape.length; r++) {
+        for (let c = 0; c < player.shape[r].length; c++) {
+            if (player.shape[r][c] !== 0) {
+                board[player.y + r][player.x + c] = player.shape[r][c];
+            }
+        }
+    }
+    
+    Audio.playLand();
+    blocksPlaced++;
+    document.getElementById('blocks').innerText = blocksPlaced;
+    
+    clearLines();
+    spawn();
+}
+
+function clearLines() {
+    let linesCleared = 0;
+    for (let y = ROWS - 1; y >= 0; y--) {
+        if (board[y].every(v => v !== 0)) {
+            board.splice(y, 1);
+            board.unshift(Array(COLS).fill(0));
+            linesCleared++;
+            y++;
+        }
+    }
+    if (linesCleared > 0) {
+        score += [0, 120, 350, 600, 1000][linesCleared];
+        document.getElementById('score').innerText = score;
+        Audio.playClear();
+    }
+}
+
+/**
+ * RENDER LOOP
+ */
+let lastTime = 0;
+
+function update(time = performance.now()) {
+    if (isGameOver) return; 
+    
+    const dt = time - lastTime;
+    lastTime = time;
+
+    dropCounter += dt;
+    if (dropCounter > dropInterval) {
+        dropCounter = 0;
+        if (!collide(board, player.x, player.y + 1, player.shape)) {
+            player.y++;
+        } else {
+            lock();
+        }
+    }
+    
+    draw();
+    animationId = requestAnimationFrame(update);
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Glowing grid
+    ctx.strokeStyle = 'rgba(255, 220, 255, 0.06)';
+    ctx.lineWidth = 1;
+    for(let i = 1; i < COLS; i++) {
+        ctx.beginPath(); 
+        ctx.moveTo(i*SIZE, 0); 
+        ctx.lineTo(i*SIZE, canvas.height); 
+        ctx.stroke();
+    }
+    for(let i = 1; i < ROWS; i++) {
+        ctx.beginPath(); 
+        ctx.moveTo(0, i*SIZE); 
+        ctx.lineTo(canvas.width, i*SIZE); 
+        ctx.stroke();
+    }
+
+    // Draw existing board
+    for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+            if (board[y][x] !== 0) drawBlock(x, y, COLORS[board[y][x]]);
+        }
+    }
+
+    // Draw active player piece
+    if (player.shape) {
+        for (let y = 0; y < player.shape.length; y++) {
+            for (let x = 0; x < player.shape[y].length; x++) {
+                if (player.shape[y][x] !== 0) {
+                    drawBlock(player.x + x, player.y + y, COLORS[player.shape[y][x]]);
+                }
+            }
+        }
+    }
+
+    // Draw GAME OVER overlay directly onto the canvas when triggered
+    if (isGameOver) {
+        ctx.fillStyle = "rgba(10, 5, 25, 0.85)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#ff9dff";
+        ctx.font = "26px 'Segoe UI'";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(255, 157, 255, 0.6)";
+        ctx.shadowBlur = 15;
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2);
+        ctx.shadowBlur = 0; // Reset shadow for next frame
+    }
+}
+
+function drawBlock(x, y, color) {
+    const px = x * SIZE + 2;
+    const py = y * SIZE + 2;
+    const s = SIZE - 4;
+    
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(px, py, s, s, 8);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.roundRect(px + 3, py + 3, s - 8, s/3, 6);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.roundRect(px + 6, py + 6, s - 14, 8, 4);
+    ctx.fill();
+}
+
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+    const btn = document.getElementById('sound-toggle');
+    btn.innerText = soundEnabled ? '🔊' : '🔇';
+    
+    if (soundEnabled && Audio.ctx && Audio.ctx.state === 'suspended') {
+        Audio.ctx.resume();
+    }
+}
+
+function startGame() {
+    Audio.init();
+    Audio.playStartSound();
+    
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('sound-toggle').style.display = 'block';
+    
+    if (!animationId) {
+        spawn();
+        lastTime = performance.now();
+        update(lastTime);
+    }
+}
+
+// Initial draw to render grid behind start overlay
+draw();
+
+</script>
+</body>
+</html>
